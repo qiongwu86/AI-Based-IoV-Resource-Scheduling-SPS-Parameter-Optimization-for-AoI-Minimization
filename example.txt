@@ -1,0 +1,15 @@
+Vehicle density = 50.00, RRI = 15, Vehicle speed = 72.00, AoI = 66.55137374879024
+Vehicle density = 100.00, RRI = 15, Vehicle speed = 36.00, AoI = 64.80657779901559
+Vehicle density = 150.00, RRI = 15, Vehicle speed = 24.00, AoI = 110.03774625252024
+Vehicle density = 50.00, RRI = 18, Vehicle speed = 72.00, AoI = 76.43189062867286
+Vehicle density = 100.00, RRI = 18, Vehicle speed = 36.00, AoI = 68.16871606141689
+Vehicle density = 150.00, RRI = 18, Vehicle speed = 24.00, AoI = 80.20041505225002
+Vehicle density = 50.00, RRI = 20, Vehicle speed = 72.00, AoI = 83.1573030743281
+Vehicle density = 100.00, RRI = 20, Vehicle speed = 36.00, AoI = 71.6674424759105
+Vehicle density = 150.00, RRI = 20, Vehicle speed = 24.00, AoI = 76.29214629220452
+Vehicle density = 50.00, RRI = 22, Vehicle speed = 72.00, AoI = 89.94908198611945
+Vehicle density = 100.00, RRI = 22, Vehicle speed = 36.00, AoI = 75.64466995698484
+Vehicle density = 150.00, RRI = 22, Vehicle speed = 24.00, AoI = 75.81721981841861
+Vehicle density = 50.00, RRI = 30, Vehicle speed = 72.00, AoI = 117.46708314096439
+Vehicle density = 100.00, RRI = 30, Vehicle speed = 36.00, AoI = 93.64125466899162
+Vehicle density = 150.00, RRI = 30, Vehicle speed = 24.00, AoI = 84.49481258031248
