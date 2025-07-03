@@ -224,8 +224,36 @@ def calculate_AoI(params, rho_l, RRI):
 
 class AoIEnvironment:
     """AoI优化环境，用于与优化算法交互"""
+
     def __init__(self, params=None):
         self.params = params if params else SystemParams()
+        # 初始化状态
+        self.state = None
+        # 状态空间维度 (v, rho_l, RRI, p_d, PRR)
+        self.state_dim = 5
+        # 动作空间维度 (RRI, v)
+        self.action_dim = 2
+
+    def reset(self):
+        """
+        重置环境，返回初始状态
+        输出:
+            np.array: 初始状态 [v, rho_l, RRI, p_d, PRR]
+        """
+        # 随机初始化速度和RRI
+        v = np.random.uniform(self.params.v_min, self.params.v_max)
+        rho_l = self.params.Q / v  # rho_l = 3600 / v
+        rho_l = np.clip(rho_l, self.params.rho_min, self.params.rho_max)
+        v = self.params.Q / rho_l  # 修正v以满足约束
+        RRI = np.random.uniform(self.params.RRI_min, self.params.RRI_max)
+
+        # 计算初始p_d和PRR
+        result = self.step(rho_l, RRI)
+        p_d = self._calculate_p_d(rho_l, RRI, v)
+        PRR = self._calculate_PRR(rho_l, RRI)
+
+        self.state = np.array([v, rho_l, RRI, p_d, PRR], dtype=np.float32)
+        return self.state
 
     def step(self, rho_l, RRI):
         """
@@ -234,7 +262,7 @@ class AoIEnvironment:
             rho_l: 车辆密度 (veh/km)
             RRI: 资源保留间隔 (ms)
         输出:
-            dict: 包含AoI、T_q、T_t等信息
+            dict: 包含AoI、T_q、T_t、p_d、PRR等信息
         """
         try:
             if not (self.params.rho_min <= rho_l <= self.params.rho_max and
@@ -243,6 +271,8 @@ class AoIEnvironment:
                     'AoI': float('inf'),
                     'T_q': float('inf'),
                     'T_t': float('inf'),
+                    'p_d': 0.0,
+                    'PRR': 0.0,
                     'valid': False,
                     'error': 'Input constraints violated'
                 }
@@ -250,11 +280,16 @@ class AoIEnvironment:
             T_q = calculate_queuing_delay(self.params, rho_l, RRI)
             T_t = calculate_frame_transmission_time(self.params) * 1000 * self.params.L_1
             AoI = T_q + T_t if np.isfinite(T_q) else float('inf')
+            v = self.params.Q / rho_l
+            p_d = self._calculate_p_d(rho_l, RRI, v)
+            PRR = self._calculate_PRR(rho_l, RRI)
 
             return {
                 'AoI': AoI,
                 'T_q': T_q,
                 'T_t': T_t,
+                'p_d': p_d,
+                'PRR': PRR,
                 'valid': np.isfinite(AoI),
                 'error': None if np.isfinite(AoI) else 'Computation error'
             }
@@ -264,16 +299,57 @@ class AoIEnvironment:
                 'AoI': float('inf'),
                 'T_q': float('inf'),
                 'T_t': float('inf'),
+                'p_d': 0.0,
+                'PRR': 0.0,
                 'valid': False,
                 'error': str(e)
             }
 
+    def _calculate_p_d(self, rho_l, RRI, v):
+        """计算丢弃概率p_d"""
+        try:
+            p_p, p_i, _ = channel_state_probs(self.params, v, RRI)
+            l_L, m_L_0 = calculate_l_L_and_m_L(self.params.L_1, self.params.R_cell, p_i, p_p)
+            p_d = m_L_0 * (1 - p_i) / (2 - p_p - p_i) + l_L * (1 - p_p) / (2 - p_p - p_i)
+            p_d = np.clip(p_d, 0, 1)
+            return p_d
+        except Exception as e:
+            logger.error(f"p_d计算失败: {e}")
+            return 0.0
+
+    def _calculate_PRR(self, rho_l, RRI):
+        """计算PRR，假设m=1的情况"""
+        try:
+            N_s = 2 * rho_l * self.params.R_s
+            N_r = (RRI * self.params.n_s) / self.params.t_s
+            if N_r <= N_s / 2:
+                return 0.0
+            PRR = 1 - (1 - 1 / (N_r - N_s / 2))
+            PRR = np.clip(PRR, 0, 1)
+            return PRR
+        except Exception as e:
+            logger.error(f"PRR计算失败: {e}")
+            return 0.0
+
     def get_constraints(self):
-        """返回优化约束范围"""
+        """
+        获取环境的约束范围
+        输出:
+            dict: 包含rho_l、RRI和v的范围
+        """
         return {
-            'rho_l': (self.params.rho_min, self.params.rho_max),
-            'RRI': (self.params.RRI_min, self.params.RRI_max)
+            'rho_l': [self.params.rho_min, self.params.rho_max],
+            'RRI': [self.params.RRI_min, self.params.RRI_max],
+            'v': [self.params.v_min, self.params.v_max]
         }
+
+    def get_state_dim(self):
+        """返回状态空间维度"""
+        return self.state_dim
+
+    def get_action_dim(self):
+        """返回动作空间维度"""
+        return self.action_dim
 
 
 def plot_aoi_curves():
