@@ -14,7 +14,7 @@ logger = logging.getLogger()
 class SystemParams:
     def __init__(self):
         # 交通流参数
-        self.Q = 3600  # veh/h
+        self.Q = 6000  # veh/h
         self.L = 0.5  # km
 
         # SPS参数
@@ -22,7 +22,7 @@ class SystemParams:
         self.n_s = 3  # RBGs/slot
         self.t_s = 1  # ms
 
-        # 蜂窝链路参数
+        # V2V链路参数
         self.f_c = 5.9e9  # Hz
         self.c = 3e8  # m/s
         self.F = 6  # 衰落余量
@@ -35,9 +35,9 @@ class SystemParams:
         self.R_cell = 0
 
         # 约束范围
-        self.v_min, self.v_max = 24, 90  # km/h
-        self.rho_min, self.rho_max = 40, 150  # veh/km
-        self.RRI_min, self.RRI_max = 15, 30  # ms
+        self.v_min, self.v_max = 30, 120  # km/h
+        self.rho_min, self.rho_max = 50, 200  # veh/km
+        self.RRI_min, self.RRI_max = 10, 100  # ms
 
 
 def marcum_q(a, b):
@@ -167,6 +167,7 @@ def calculate_queuing_delay(params, rho_l, RRI):
     """计算排队时延"""
     m_total = 2 * rho_l * params.L
     v = params.Q / rho_l
+    t_GAP = 2   # ms
     logger.debug(f"rho_l={rho_l} veh/km, m_total={m_total}, v={v} km/h")
 
     N_s = 2 * rho_l * params.R_s
@@ -193,9 +194,9 @@ def calculate_queuing_delay(params, rho_l, RRI):
     for m in range(1, int(N_s / 2) + 1):
         try:
             PRR = 1 - (1 - 1 / (N_r - N_s / 2)) ** m
-            E_Tm = RRI + (RRI * PRR) / (1 - PRR)
-            T_q += E_Tm + (E_Tm * p_d) / (1 - p_d)
-            logger.debug(f"m={m}, PRR={PRR}, E_Tm={E_Tm}, T_q累计={T_q}")
+            T_q += RRI + RRI * (PRR / ((1-PRR) * (1-p_d*p_d))) + max(t_GAP, RRI/2) * p_d / ((1 - p_d))
+
+            # logger.debug(f"m={m}, PRR={PRR}, E_Tm={E_Tm}, T_q累计={T_q}")
             if not np.isfinite(T_q):
                 logger.warning(f"m={m}处T_q非有限")
                 return float('inf')
@@ -352,52 +353,104 @@ class AoIEnvironment:
         return self.action_dim
 
 
+def _apply_left_threshold(x_values, y_values, threshold):
+    """在左侧阈值处直接截断曲线
+    
+    参数:
+        x_values, y_values: 原始曲线数据
+        threshold: 左侧x阈值，小于此值的点将被移除
+    返回:
+        (x_trunc, y_trunc)
+    """
+    x = np.asarray(x_values)
+    y = np.asarray(y_values)
+    
+    mask = x >= threshold
+    return x[mask], y[mask]
+
+
 def plot_aoi_curves():
     params = SystemParams()
-    # 将密度范围转换为速度范围
-    rho_l_values = np.linspace(params.rho_min, params.rho_max, 23)  # veh/km
-    v_values = 3600 / rho_l_values  # km/h，速度与密度反比
+    
+    # AoI vs Speed (v in 30-120 km/h)
+    # 先给定密度范围，然后计算对应的速度值
+    rho_l_values = np.linspace(params.rho_min, params.rho_max, 31)  # veh/km
+    v_values = params.Q / rho_l_values  # km/h，速度与密度反比
     v_values = v_values[::-1]  # 反转数组，使速度从小到大排序
     rho_l_values = rho_l_values[::-1]  # 同步反转密度数组，确保与速度对应
-    rri_values = [15, 18, 20, 22, 25]
+    
+    rri_lines = [10, 15, 20, 50, 80, 100]
+    # 左侧截断阈值，初始都设为最小值，可以根据需要调整
+    v_thresholds = {
+        10: 49,   # 可调整为 35, 40 等
+        15: 34,   # 可调整为 35, 40 等
+        20: 30,   # 可调整为 32, 35 等
+        50: params.v_min,   # 可调整为 30, 32 等
+        80: params.v_min,
+        100: params.v_min
+    }
 
     plt.figure(figsize=(10, 6))
-    for rri in rri_values:
+    all_v = []
+    all_aoi_v = []
+    for rri in rri_lines:
         aoi_values = []
         for rho_l in rho_l_values:
             aoi = calculate_AoI(params, rho_l, rri)
             aoi_values.append(aoi if np.isfinite(aoi) else np.nan)
-        plt.plot(v_values, aoi_values, label=f'RRI={rri} ms')
-
-    plt.xlabel('Vehicle Speed (km/h)')
-    plt.ylabel('AoI (ms)')
-    plt.legend()
+        # 应用左侧阈值截断
+        v_trunc, aoi_trunc = _apply_left_threshold(v_values, aoi_values, v_thresholds[rri])
+        plt.plot(v_trunc, aoi_trunc, label=f'RRI={rri} ms', linewidth=2)
+        all_v.extend(v_trunc)
+        all_aoi_v.extend(aoi_trunc)
+    if all_v and all_aoi_v:
+        plt.xlim(min(all_v), max(all_v))
+        plt.ylim(0, 450)
+    plt.xlabel('Vehicle Speed (km/h)', fontsize=14)
+    plt.ylabel('AoI (ms)', fontsize=14)
+    plt.legend(fontsize=14)
     plt.grid(True)
-    plt.savefig('aoi_vs_v.png')
+    plt.tick_params(axis='both', which='major', labelsize=14)
+    plt.savefig('aoi_vs_v.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-    rri_values = np.linspace(params.RRI_min, params.RRI_max, 60)
-    # 将固定的密度值转换为速度值
-    rho_l_values = [60, 90, 120, 150]  # veh/km
-    v_values = [3600 / rho_l for rho_l in rho_l_values]  # km/h
+    # AoI vs RRI (RRI in 10-100 ms)
+    rri_values = np.linspace(params.RRI_min, params.RRI_max, 181)
+    rho_l_values = [50, 100, 150, 200]  # veh/km
+    # 左侧截断阈值，初始都设为最小值，可以根据需要调整
+    rri_thresholds = {
+        50: params.RRI_min,    # 可调整为 15, 20 等
+        100: params.RRI_min,   # 可调整为 12, 15 等
+        150: 14,   # 可调整为 11, 13 等
+        200: 18    # 可调整为 10, 12 等
+    }
     plt.figure(figsize=(10, 6))
-    for rho_l, v in zip(rho_l_values, v_values):
+    all_rri = []
+    all_aoi_rri = []
+    for rho_l in rho_l_values:
         aoi_values = []
         for rri in rri_values:
             aoi = calculate_AoI(params, rho_l, rri)
             aoi_values.append(aoi if np.isfinite(aoi) else np.nan)
-        plt.plot(rri_values, aoi_values, label=f'v={v:.1f} km/h')
-
-    plt.xlabel('RRI (ms)')
-    plt.ylabel('AoI (ms)')
-    plt.legend()
+        # 应用左侧阈值截断
+        rri_trunc, aoi_trunc = _apply_left_threshold(rri_values, aoi_values, rri_thresholds[rho_l])
+        plt.plot(rri_trunc, aoi_trunc, label=f'ρ={rho_l} veh/km', linewidth=2)
+        all_rri.extend(rri_trunc)
+        all_aoi_rri.extend(aoi_trunc)
+    if all_rri and all_aoi_rri:
+        plt.xlim(min(all_rri), max(all_rri))
+        plt.ylim(0, 250)
+    plt.xlabel('RRI (ms)', fontsize=14)
+    plt.ylabel('AoI (ms)', fontsize=14)
+    plt.legend(fontsize=14)
     plt.grid(True)
-    plt.savefig('aoi_vs_rri.png')
+    plt.tick_params(axis='both', which='major', labelsize=14)
+    plt.savefig('aoi_vs_rri.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     # 柱状图部分，将密度转换为速度
     rho_l_values = [50, 75, 100, 125, 150]  # veh/km
-    v_values = [3600 / rho_l for rho_l in rho_l_values]  # km/h
+    v_values = [6000 / rho_l for rho_l in rho_l_values]  # km/h
     rri_values = [15, 20, 25]
     aoi_data = {rri: [] for rri in rri_values}
 
@@ -406,7 +459,7 @@ def plot_aoi_curves():
             aoi = calculate_AoI(params, rho_l, rri)
             aoi_data[rri].append(aoi if np.isfinite(aoi) else np.nan)
 
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(14, 8))
     bar_width = 0.25
     index = np.arange(len(v_values))
 
@@ -414,13 +467,14 @@ def plot_aoi_curves():
     plt.bar(index + bar_width, aoi_data[20], bar_width, label='RRI=20 ms', color='lightgreen')
     plt.bar(index + 2 * bar_width, aoi_data[25], bar_width, label='RRI=25 ms', color='salmon')
 
-    plt.xlabel('Vehicle Speed (km/h)')
-    plt.ylabel('AoI (ms)')
-    plt.title('AoI vs Vehicle Speed for Different RRI')
-    plt.xticks(index + bar_width, [f'{v:.1f}' for v in v_values])
-    plt.legend()
+    plt.xlabel('Vehicle Speed (km/h)', fontsize=14)
+    plt.ylabel('AoI (ms)', fontsize=14)
+    plt.title('AoI vs Vehicle Speed for Different RRI', fontsize=16)
+    plt.xticks(index + bar_width, [f'{v:.1f}' for v in v_values], fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.legend(fontsize=12)
     plt.grid(True, axis='y')
-    plt.savefig('aoi_bar_v.png')
+    plt.savefig('aoi_bar_v.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -432,4 +486,4 @@ if __name__ == "__main__":
     # print(f"AoI: {result['AoI']:.2f} ms, T_q: {result['T_q']:.2f} ms, T_t: {result['T_t']:.2f} ms, Valid: {result['valid']}")
 
     plot_aoi_curves()
-    print("Plots saved as 'aoi_vs_rho_l.png', 'aoi_vs_rri.png', and 'aoi_bar_rho_l.png'")
+    print("Plots saved as 'aoi_vs_v.png', 'aoi_vs_rri.png', and 'aoi_bar_v.png'")

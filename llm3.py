@@ -32,29 +32,62 @@ plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 # 创建 llm 目录
 os.makedirs('llm', exist_ok=True)
 
-# 示例决策数据
-EXEMPLARY_DECISIONS = [
-    "Vehicle density = 50.00, RRI = 15, Vehicle speed = 72.00, AoI = 66.55137374879024",
-    "Vehicle density = 100.00, RRI = 15, Vehicle speed = 36.00, AoI = 64.80657779901559",
-    "Vehicle density = 150.00, RRI = 15, Vehicle speed = 24.00, AoI = 110.03774625252024",
-    "Vehicle density = 50.00, RRI = 18, Vehicle speed = 72.00, AoI = 76.43189062867286",
-    "Vehicle density = 100.00, RRI = 18, Vehicle speed = 36.00, AoI = 68.16871606141689",
-    "Vehicle density = 150.00, RRI = 18, Vehicle speed = 24.00, AoI = 80.20041505225002",
-    "Vehicle density = 50.00, RRI = 20, Vehicle speed = 72.00, AoI = 83.1573030743281",
-    "Vehicle density = 100.00, RRI = 20, Vehicle speed = 36.00, AoI = 71.76674424759105",
-    "Vehicle density = 150.00, RRI = 20, Vehicle speed = 24.00, AoI = 76.29214629220452",
-    "Vehicle density = 50.00, RRI = 22, Vehicle speed = 72.00, AoI = 89.94908198611945",
-    "Vehicle density = 100.00, RRI = 22, Vehicle speed = 36.00, AoI = 75.64466995698484",
-    "Vehicle density = 150.00, RRI = 22, Vehicle speed = 24.00, AoI = 75.81721981841861",
-    "Vehicle density = 50.00, RRI = 30, Vehicle speed = 72.00, AoI = 117.46708314096439",
-    "Vehicle density = 100.00, RRI = 30, Vehicle speed = 36.00, AoI = 93.64125466899162",
-    "Vehicle density = 150.00, RRI = 30, Vehicle speed = 24.00, AoI = 84.49481258031248"
-]
+# 示例决策数据 - 从exemplary_decisions.txt加载
+def load_exemplary_decisions():
+    """从文件加载示例决策数据"""
+    try:
+        with open('exemplary_decisions.txt', 'r', encoding='utf-8') as f:
+            decisions = [line.strip() for line in f if line.strip()]
+        logger.info(f"成功加载 {len(decisions)} 条示例决策数据")
+        return decisions
+    except FileNotFoundError:
+        logger.warning("exemplary_decisions.txt 文件未找到，使用默认示例数据")
+        # 保留原始数据作为备份
+        return [
+            "Vehicle density = 50.00, RRI = 10, Vehicle speed = 120.00, AoI = 36.03517298746483",
+            "Vehicle density = 100.00, RRI = 10, Vehicle speed = 60.00, AoI = 76.79915071475075",
+            "Vehicle density = 50.00, RRI = 15, Vehicle speed = 120.00, AoI = 46.38068036127734",
+            "Vehicle density = 100.00, RRI = 15, Vehicle speed = 60.00, AoI = 53.650618558910864",
+            "Vehicle density = 150.00, RRI = 15, Vehicle speed = 40.00, AoI = 93.53955508172216",
+            "Vehicle density = 200.00, RRI = 15, Vehicle speed = 30.00, AoI = 20664.832523101995",
+            "Vehicle density = 50.00, RRI = 18, Vehicle speed = 120.00, AoI = 53.17119162263166",
+            "Vehicle density = 100.00, RRI = 18, Vehicle speed = 60.00, AoI = 56.833141942054745",
+            "Vehicle density = 150.00, RRI = 18, Vehicle speed = 40.00, AoI = 69.7720228303289",
+            "Vehicle density = 200.00, RRI = 18, Vehicle speed = 30.00, AoI = 177.4853119928094",
+            "Vehicle density = 50.00, RRI = 20, Vehicle speed = 120.00, AoI = 57.78440636150118",
+            "Vehicle density = 100.00, RRI = 20, Vehicle speed = 60.00, AoI = 59.91471190657373",
+            "Vehicle density = 150.00, RRI = 20, Vehicle speed = 40.00, AoI = 66.96923502437795",
+            "Vehicle density = 200.00, RRI = 20, Vehicle speed = 30.00, AoI = 107.55740504177848",
+            "Vehicle density = 50.00, RRI = 50, Vehicle speed = 120.00, AoI = 128.88773603357774",
+            "Vehicle density = 100.00, RRI = 50, Vehicle speed = 60.00, AoI = 120.23562261937214",
+            "Vehicle density = 150.00, RRI = 50, Vehicle speed = 40.00, AoI = 108.83251150693818",
+            "Vehicle density = 200.00, RRI = 50, Vehicle speed = 30.00, AoI = 102.44040401640717",
+            "Vehicle density = 50.00, RRI = 80, Vehicle speed = 120.00, AoI = 200.6277633698829",
+            "Vehicle density = 100.00, RRI = 80, Vehicle speed = 60.00, AoI = 183.98165808864877",
+            "Vehicle density = 150.00, RRI = 80, Vehicle speed = 40.00, AoI = 162.90206549293336",
+            "Vehicle density = 200.00, RRI = 80, Vehicle speed = 30.00, AoI = 149.1133489575789",
+            "Vehicle density = 50.00, RRI = 100, Vehicle speed = 120.00, AoI = 248.51165053097685",
+            "Vehicle density = 100.00, RRI = 100, Vehicle speed = 60.00, AoI = 226.71191005572146",
+            "Vehicle density = 150.00, RRI = 100, Vehicle speed = 40.00, AoI = 199.49401451576745",
+            "Vehicle density = 200.00, RRI = 100, Vehicle speed = 30.00, AoI = 181.30792130969232"
+        ]
+    except Exception as e:
+        logger.error(f"加载示例决策数据失败: {e}")
+        return []
+
+# 加载示例决策数据
+EXEMPLARY_DECISIONS = load_exemplary_decisions()
 
 # 任务提示模板
-TASK_PROMPT = """任务背景：在本任务考虑的车联网系统中，系统的信息年龄（AoI）由排队延迟和传输延迟组成。车辆通过半持续调度（SPS）机制竞争资源。车辆密度会影响资源冲突概率，资源重传间隔（RRI）决定了重传的时间间隔，而车辆速度会影响传输成功率——若传输失败，数据需重新进入SPS队列。在固定交通流量的场景下，车辆速度（km/h）与密度（veh/km）的乘积为常数3600。车辆速度范围为[24-90]公里/小时，密度范围为[40-150]辆/公里，RRI范围为[15-30]毫秒。示例决策给出了具有代表性的参数时系统的AoI情况，历史决策是你之前生成的决策，在此基础上继续优化参数，使AoI变小。
-任务目标：通过调整车辆密度、RRI和车辆速度（3600除以密度）的取值，使AoI达到最小值。
+TASK_PROMPT = """任务背景：在本任务考虑的车联网系统中，系统的信息年龄（AoI）由排队延迟和传输延迟组成。车辆通过半持续调度（SPS）机制竞争资源。车辆密度会影响资源冲突概率，资源重传间隔（RRI）决定了重传的时间间隔，而车辆速度会影响传输成功率——若传输失败，数据需重新进入SPS队列。在固定交通流量的场景下，车辆速度（km/h）与密度（veh/km）的乘积为常数6000。车辆速度范围为[30-120]公里/小时，密度范围为[50-200]辆/公里，RRI范围为[10-100]毫秒。示例决策给出了具有代表性的参数时系统的AoI情况，历史决策是你之前生成的决策，在此基础上继续优化参数，使AoI变小。
+任务目标：通过调整车辆密度、RRI和车辆速度（6000除以密度）的取值，使AoI达到最小值。
+当前Epoch：{EPOCH}
+探索/收敛指令：{MODE_INSTRUCTION}
+当前最优参考：{BEST_INFO}
 主要任务：参考示例决策，根据历史决策及结果进行逻辑推导，判断如何调整车辆密度、RRI和车辆速度以最小化AoI。根据推导结果，给出下一轮的参数建议。
+注意：
+- 必须满足 v = 6000 / 车辆密度，且速度∈[30,120]，密度∈[50,200]，RRI∈[10,100]
+- 避免重复：优先输出一个在“示例决策”和“历史决策”中未出现过的参数三元组（车辆密度, RRI, 车辆速度）
 示例决策：
 {EXEMPLARY_DECISIONS}
 历史决策：
@@ -68,7 +101,7 @@ def call_llm_api(prompt):
     预期返回：格式为"Vehicle density = [num], RRI = [num], Vehicle speed = [num]"的字符串
     """
     client = OpenAI(
-        api_key="sk-vVE4cgTz0JgJQWQGWBDJ8YCWL39N44b4A4NtkN460ppGXzRm",  # 请替换为有效的API密钥
+        api_key="sk-yWOEBOGdA2nwqxbPYugjXfBNjqcfUVJzhDM88F45pnTF5tuO",  # 请替换为有效的API密钥
         base_url="https://api.openai-hub.com/v1"
     )
 
@@ -81,7 +114,7 @@ def call_llm_api(prompt):
                         "content": prompt,
                     }
                 ],
-                model="grok-3",
+                model="gpt-4.1",
             )
             result = chat_completion.choices[0].message.content
             logger.info(f"LLM返回结果：{result}")
@@ -108,24 +141,24 @@ def parse_llm_output(output):
         rri = float(match.group(2))
         v_raw = float(match.group(3))
 
-        RHO_MIN, RHO_MAX = 40, 150
-        V_MIN, V_MAX = 24, 90
+        RHO_MIN, RHO_MAX = 50, 200
+        V_MIN, V_MAX = 30, 120
 
-        rri = np.clip(rri, 15.0, 30.0)
+        rri = np.clip(rri, 10.0, 100.0)
         rho_l_candidate = int(round(np.clip(rho_l_raw, RHO_MIN, RHO_MAX)))
-        v_candidate = 3600 / rho_l_candidate
+        v_candidate = 6000 / rho_l_candidate
 
         if V_MIN <= v_candidate <= V_MAX:
             rho_l = rho_l_candidate
             v = v_candidate
         else:
-            valid_rho = list(range(max(RHO_MIN, int(np.ceil(3600 / V_MAX))),
-                                  min(RHO_MAX + 1, int(np.floor(3600 / V_MIN)) + 1)))
+            valid_rho = list(range(max(RHO_MIN, int(np.ceil(6000 / V_MAX))),
+                                  min(RHO_MAX + 1, int(np.floor(6000 / V_MIN)) + 1)))
             if not valid_rho:
                 logger.error("无满足约束的 rho_l 和 v 组合")
                 return 100, rri, 36.0
             rho_l = min(valid_rho, key=lambda x: abs(x - rho_l_candidate))
-            v = 3600 / rho_l
+            v = 6000 / rho_l
 
         logger.info(f"解析并剪切参数：rho_l={rho_l}, rri={rri:.2f}, v={v:.2f}")
         return rho_l, rri, v
@@ -196,6 +229,11 @@ def main():
     with open(history_file, 'w', encoding='utf-8') as f:
         f.truncate(0)
     logger.info(f"{history_file} 已清空")
+    
+    # 清空历史记录文件（用于绘图）
+    with open('history.txt', 'w', encoding='utf-8') as f:
+        f.truncate(0)
+    logger.info("history.txt 已清空")
 
     # 初始化平均 AoI 文件
     avg_aoi_file = os.path.join('llm', 'avg_aoi_per_epoch.txt')
@@ -216,14 +254,48 @@ def main():
     # 跟踪最佳结果
     best_aoi = float('inf')
     best_params = None
+    # 跟踪各Epoch平均AoI用于“多次探索无显著改进”的判定
+    avg_aoi_history = []
 
     for epoch in range(max_epochs):
         logger.info(f"开始 Epoch {epoch + 1}/{max_epochs}")
 
-        # 构建固定提示
+        # 计算是否进入“多次探索无显著改进”阶段（基于近3个与前3个Epoch均值差）
+        epoch_idx = epoch + 1
+        no_significant_improve = False
+        if epoch_idx > 10 and len(avg_aoi_history) >= 6:
+            prev3 = [x for x in avg_aoi_history[-6:-3] if np.isfinite(x)]
+            recent3 = [x for x in avg_aoi_history[-3:] if np.isfinite(x)]
+            if len(prev3) == 3 and len(recent3) == 3:
+                improvement = np.mean(prev3) - np.mean(recent3)
+                no_significant_improve = improvement < 1.0  # 绝对改进阈值（ms）
+
+        # 构建提示
         exemplary_text = "\n".join(EXEMPLARY_DECISIONS)
         historical_text = "\n".join(historical_decisions) if historical_decisions else ""
+        if best_params is not None:
+            best_info = f"Vehicle density = {best_params[0]:.2f}, RRI = {best_params[1]:.2f}, Vehicle speed = {best_params[2]:.2f}, 当前最优AoI = {best_aoi:.2f}"
+        else:
+            best_info = "暂无"
+
+        if epoch_idx <= 10:
+            mode_instruction = (
+                "本轮必须探索一个未在‘示例决策’和‘历史决策’中出现过的新参数三元组；严禁重复已有组合。"
+            )
+        else:
+            if no_significant_improve:
+                mode_instruction = (
+                    "最近多次探索未见显著改进（近3个Epoch平均AoI较前3个Epoch提升<1.0）。"
+                    "允许直接输出当前最优配置；如继续探索也需尽量避免重复。"
+                )
+            else:
+                mode_instruction = (
+                    "优先探索未出现的新参数三元组；避免与‘示例决策’和‘历史决策’重复。"
+                )
         prompt = TASK_PROMPT.format(
+            EPOCH=epoch_idx,
+            MODE_INSTRUCTION=mode_instruction,
+            BEST_INFO=best_info,
             EXEMPLARY_DECISIONS=exemplary_text,
             HISTORICAL_DECISIONS=historical_text
         )
@@ -257,10 +329,20 @@ def main():
                 continue
 
             aoi = result['AoI']
+            
+            # 异常值处理：AoI < 20 或 > 500 时设为500
+            if aoi < 20 or aoi > 500:
+                logger.warning(f"检测到异常AoI值：{aoi:.4f}，设置为500")
+                aoi = 500.0
             decision = f"Vehicle density = {rho_l:.4f}, RRI = {rri:.4f}, Vehicle speed = {v:.4f}, AoI = {aoi:.4f}"
             epoch_decisions.append(decision)
             epoch_aois.append(aoi)
             logger.info(f"Epoch {epoch + 1} 决策：{decision}")
+
+            # 存储决策到历史记录文件（用于绘图）
+            with open('history.txt', 'a', encoding='utf-8') as f:
+                f.write(decision + '\n')
+            logger.info(f"添加到历史记录：{decision}")
 
             # 更新最佳结果
             if aoi < best_aoi:
@@ -275,10 +357,13 @@ def main():
                 with open(avg_aoi_file, 'a', encoding='utf-8') as f:
                     f.write(f"{epoch + 1},{avg_aoi:.4f}\n")
                 logger.info(f"Epoch {epoch + 1} 平均 AoI: {avg_aoi:.4f}")
+                avg_aoi_history.append(avg_aoi)
             else:
                 logger.warning(f"Epoch {epoch + 1} 无有效 AoI 值")
+                avg_aoi_history.append(np.nan)
         else:
             logger.warning(f"Epoch {epoch + 1} 无有效决策")
+            avg_aoi_history.append(np.nan)
 
         # 去重：与现有 historical_decisions 一起检查重复
         unique_decisions = deduplicate_decisions(epoch_decisions, historical_decisions)

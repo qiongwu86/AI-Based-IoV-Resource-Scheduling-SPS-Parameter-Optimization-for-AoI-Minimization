@@ -40,6 +40,13 @@ def exhaustive_search(env, rho_range, rri_range, rri_step=0.1):
                     result.get('valid', False) and
                     result.get('error') is None):
                     aoi = result['AoI']
+                    
+                    # 屏蔽异常值：AoI < 0 或 AoI > 10000
+                    if aoi < 20 or aoi > 10000:
+                        invalid_combinations += 1
+                        print(f"异常AoI值被屏蔽: rho={rho}, RRI={RRI}, AoI={aoi:.4f}")
+                        continue
+                    
                     valid_combinations += 1
                     print(f"组合: rho={rho}, RRI={RRI}, AoI={aoi:.4f}")
                     if aoi < best_aoi:
@@ -69,9 +76,9 @@ def exhaustive_search(env, rho_range, rri_range, rri_step=0.1):
 
 def main(env):
     # 定义搜索范围
-    rho_range = (40, 150)  # rho 从 40 到 150
-    rri_range = (15.0, 30.0)  # RRI 从 15.0 到 30.0
-    rri_step = 0.1  # RRI 间隔 0.1ms
+    rho_range = (50, 200)  # rho 从 40 到 150
+    rri_range = (10.0, 100.0)  # RRI 从 15.0 到 30.0
+    rri_step = 1  # RRI 间隔 1ms
 
     # 执行穷举搜索
     best_rho, best_RRI, best_aoi = exhaustive_search(env, rho_range, rri_range, rri_step)

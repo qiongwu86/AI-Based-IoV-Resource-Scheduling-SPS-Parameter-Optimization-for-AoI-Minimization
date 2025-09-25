@@ -244,23 +244,29 @@ def train_ddpg(episodes=150, max_steps=100):
         for step in range(max_steps):
             action, _ = ddpg.select_action(state, episode=episode)  # Pass episode for noise decay
             rri, v = action
-            rho_l = 3600 / v
+            rho_l = 6000 / v
             rho_l = np.clip(rho_l, rho_l_min, rho_l_max)
-            v = 3600 / rho_l  # Ensure v * rho_l = 3600
+            v = 6000 / rho_l  # Ensure v * rho_l = 6000
 
             # Environment interaction
             result = env.step(rho_l, rri)
             aoi = result['AoI']
+            
+            # 屏蔽异常值：AoI < 20 或 AoI > 10000，设为无效
+            if aoi < 20 or aoi > 10000:
+                result['valid'] = False
+                aoi = float('inf')  # 设为无穷大以便后续处理
+            
             # New reward calculation with condition
             if result['valid']:
-                if aoi < 63:
-                    reward = (-63 / 10 + 8) + (63 - aoi)  # = 1.7 + (63 - aoi)
-                elif aoi < 60:
-                    reward = (-63 / 10 + 8) + 3 + 3 * (60 - aoi)  # = 1.7 + (63 - aoi)
+                if aoi < 70:
+                    reward = (-70 / 10 + 10) + (70 - aoi)  # = 1.7 + (63 - aoi)
+                elif aoi < 55:
+                    reward = (-55 / 10 + 10) + 15 + 3 * (55 - aoi)  # = 1.7 + (63 - aoi)
                 else:
-                    reward = -aoi / 10 + 8
+                    reward = -aoi / 10 + 10
             else:
-                reward = -10
+                reward = -30
             next_state = np.array([v, rho_l, rri, result['p_d'], result['PRR']], dtype=np.float32)
             done = False
 
@@ -273,13 +279,14 @@ def train_ddpg(episodes=150, max_steps=100):
                         f"T_q: {result['T_q']:.2f} ms, T_t: {result['T_t']:.2f} ms, "
                         f"p_d: {result['p_d']:.4f}, PRR: {result['PRR']:.4f}")
 
-            # Store experience
-            ddpg.replay_buffer.push(state, action, reward, next_state, done)
-            states.append(state)
-            actions.append(action)
-            rewards.append(reward)
-            dones.append(done)
-            episode_aoi.append(aoi)  # Store AoI for this step
+            # Store experience - 只有有效的经验才放入replay buffer
+            if result['valid']:
+                ddpg.replay_buffer.push(state, action, reward, next_state, done)
+                states.append(state)
+                actions.append(action)
+                rewards.append(reward)
+                dones.append(done)
+                episode_aoi.append(aoi)  # Store AoI for this step
 
             # Update networks
             if len(ddpg.replay_buffer) >= ddpg.batch_size:
@@ -297,7 +304,9 @@ def train_ddpg(episodes=150, max_steps=100):
 
         ddpg.noise.reset()  # Reset noise at the end of each episode
         episode_rewards.append(episode_reward / (step + 1))
-        min_aoi_history.append(np.mean(episode_aoi) if episode_aoi else float('inf'))  # Use minimum AoI directly
+        # 只统计有效AoI值（在合理范围内）
+        valid_aoi = [aoi for aoi in episode_aoi if 20 <= aoi <= 10000]
+        min_aoi_history.append(np.mean(valid_aoi) if valid_aoi else float('inf'))
         p_d_history.append(result['p_d'])
         prr_history.append(result['PRR'])
 

@@ -9,8 +9,8 @@ env = AoIEnvironment()
 constraints = env.get_constraints()
 
 # 定义约束范围
-RHO_L_CONSTRAINTS = [40, 90]  # rho_l 的范围为 40 到 90
-RRI_CONSTRAINTS = [15, 30]    # 更新 RRI 范围为 15 到 30
+RHO_L_CONSTRAINTS = [50, 200]  # rho_l 的范围为 40 到 90
+RRI_CONSTRAINTS = [10, 100]    # 更新 RRI 范围为 15 到 30
 
 # 定义优化问题
 creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
@@ -21,10 +21,13 @@ def evaluate(individual):
     rho_l = int(round(individual[0]))
     rho_l = int(np.clip(rho_l, RHO_L_CONSTRAINTS[0], RHO_L_CONSTRAINTS[1]))
     RRI = individual[1]
-    RRI = np.clip(RRI, RRI_CONSTRAINTS[0], RRI_CONSTRAINTS[1])  # 限制 RRI 在 [15, 30]
+    RRI = np.clip(RRI, RRI_CONSTRAINTS[0], RRI_CONSTRAINTS[1])  # 限制 RRI 在约束范围内
     result = env.step(rho_l, RRI)
     AoI = result['AoI']
     if not np.isfinite(AoI):
+        return 1e6,  # 大惩罚值
+    # 屏蔽异常值：AoI < 20 或 AoI > 10000
+    if AoI < 20 or AoI > 10000:
         return 1e6,  # 大惩罚值
     return AoI,
 
@@ -44,9 +47,10 @@ toolbox.register("mate", tools.cxBlend, alpha=0.5)
 toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=0.5, indpb=0.2)
 toolbox.register("select", tools.selTournament, tournsize=3)
 
-# 自定义平均值函数，丢弃 inf 值
+# 自定义平均值函数，丢弃 inf 值和异常值
 def valid_mean(values):
-    valid_values = [v[0] for v in values if np.isfinite(v[0]) and v[0] < 1e6]  # 提取元组的第一个元素
+    # 提取元组的第一个元素，同时屏蔽异常值和惩罚值
+    valid_values = [v[0] for v in values if np.isfinite(v[0]) and v[0] < 1e6 and 20 <= v[0] <= 10000]
     return np.mean(valid_values) if valid_values else np.nan  # 如果没有有效值，返回 nan
 
 # 运行遗传算法
@@ -98,6 +102,6 @@ plt.show()
 # 输出最优解
 best_individual = hof[0]
 rho_l = int(round(best_individual[0]))
-v = 3600 / rho_l
+v = 6000 / rho_l
 print(f"Optimal rho_l: {rho_l}, RRI: {best_individual[1]:.2f}, "
       f"Vehicle speed: {v:.2f}, AoI: {best_individual.fitness.values[0]:.2f} ms")

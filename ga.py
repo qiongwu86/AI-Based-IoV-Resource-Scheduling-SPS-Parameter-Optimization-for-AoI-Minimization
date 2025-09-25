@@ -72,6 +72,6 @@ plt.show()
 # 输出最优解
 best_individual = hof[0]
 rho_l = int(round(best_individual[0]))
-v = 3600 / rho_l  # 计算 v 确保 v * rho_l = 3600
+v = 6000 / rho_l  # 计算 v 确保 v * rho_l = 6000
 print(f"Optimal rho_l: {rho_l}, RRI: {best_individual[1]:.2f}, "
       f"Vehicle speed: {v:.2f}, AoI: {best_individual.fitness.values[0]:.2f} ms")
